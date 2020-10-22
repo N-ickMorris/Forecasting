@@ -1,0 +1,12 @@
+{
+    "csv": "test/bikes.csv",
+    "datetime": "datetime",
+    "output": "count",
+    "inputs": ["season", "holiday", "workingday", "weather", "temp", "atemp", "humidity", "windspeed"],
+    "tune_model": false,
+    "train_samples": 100,
+    "history_window": 10,
+    "forecast_window": 10,
+    "forecast_frequency": 1,
+    "train_frequency": 5
+}

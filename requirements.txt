@@ -1,0 +1,10 @@
+scipy
+numpy==1.18.5
+pandas
+scikit-learn
+statsmodels
+xgboost
+tensorflow
+keras
+plotly
+pydantic
