@@ -5,7 +5,7 @@
     "datetime": "datetime",
     "train_samples": 100,
     "history_window": 10,
-    "forecast_window": 5,
+    "forecast_window": 10,
     "forecast_frequency": 1,
     "train_frequency": 5,
     "tune_model": false

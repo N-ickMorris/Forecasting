@@ -16,13 +16,14 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from forecast import Forecasting
+from lasso import Regression
 
 # import the configuration for modeling
 with open("test/config.json") as f:
     config = json.load(f)
 
 # produce a rolling forecast
-model = Forecasting(**config)
+model = Regression(**config)
 model.roll()
 
 # pick a step ahead to evaluate
