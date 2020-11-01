@@ -3,10 +3,11 @@
     "output": "count",
     "inputs": ["season", "holiday", "workingday", "weather", "temp", "atemp", "humidity", "windspeed"],
     "datetime": "datetime",
-    "train_samples": 100,
-    "history_window": 10,
-    "forecast_window": 10,
+    "resolution": ["hour", "weekday"],
+    "train_samples": 1440,
+    "history_window": 6,
+    "forecast_window": 24,
     "forecast_frequency": 1,
-    "train_frequency": 5,
+    "train_frequency": 1,
     "tune_model": false
 }

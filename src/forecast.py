@@ -7,7 +7,7 @@ Stream data through an exponential smoothing model to produce a rolling forecast
 
 import os
 import warnings
-from typing import Union
+from typing import Union, List
 from pydantic import BaseModel, root_validator
 import numpy as np
 import pandas as pd
@@ -23,16 +23,20 @@ class Forecasting(BaseModel):
     Parameters
     ----------
     csv : str
-        CSV file of a data frame -> "example.csv"
+        name of (or path to) CSV file of a data frame
 
     output : str
-        name of column to predict in a model -> "Y"
+        name of column to predict in a model
 
-    inputs : list, default=None
-        names of columns to use as features in a model -> ["X1", "X2"]
+    inputs : list of str, default=None
+        names of columns to use as features in a model
 
     datetime : str, default=None
         name of column to use as an index for the predictions
+
+    resolution : list of str, default=None
+        name of time intervals to use as features in a model
+            options: year, quarter, month, week, dayofyear, day, weekday, hour, minute, second
 
     train_samples : int, default=100
         the number of observations to train the model with
@@ -76,8 +80,9 @@ class Forecasting(BaseModel):
     # input arguments (**kwarg)
     csv: str
     output: str
-    inputs: Union[list, None] = None
+    inputs: Union[List[str], None] = None
     datetime: Union[str, None] = None
+    resolution: Union[List[str], None] = None
     train_samples: int = 100
     history_window: int = 10
     forecast_window: int = 10
@@ -95,7 +100,9 @@ class Forecasting(BaseModel):
         """
         super().__init__(**kwarg)  # validate the input arguments
         object.__setattr__(self, "_model", None)  # initial value
-        object.__setattr__(self, "_data", pd.read_csv(self.csv))  # load the data
+        object.__setattr__(
+            self, "_data", pd.read_csv(self.csv).reset_index(drop=True)
+        )  # load the data
         object.__setattr__(self, "_predictions", pd.DataFrame())  # initial value
         object.__setattr__(self, "_actual", pd.DataFrame())  # initial value
         object.__setattr__(self, "_error", pd.DataFrame())  # initial value
@@ -118,7 +125,12 @@ class Forecasting(BaseModel):
             raise FileNotFoundError(f"There is no csv file at '{os.getcwd()}/{csv}'")
         df = pd.read_csv(csv)
 
-        Y, X, T = values.get("output"), values.get("inputs"), values.get("datetime")
+        Y, X, T, R = (
+            values.get("output"),
+            values.get("inputs"),
+            values.get("datetime"),
+            values.get("resolution"),
+        )
 
         # validate output
         if not Y in df.columns:
@@ -144,6 +156,30 @@ class Forecasting(BaseModel):
             raise ValueError(
                 f"'datetime' should be a column name in 'csv', got a value of '{T}' instead"
             )
+
+        # validate resolution
+        if not R is None:
+            not_found = [
+                not r
+                in [
+                    "year",
+                    "quarter",
+                    "month",
+                    "week",
+                    "dayofyear",
+                    "day",
+                    "weekday",
+                    "hour",
+                    "minute",
+                    "second",
+                ]
+                for r in R
+            ]
+            if any(not_found):
+                invalid_names = np.array(R)[np.where(not_found)[0]].tolist()
+                raise ValueError(
+                    f"'resolution' should be a list of any of the following time intervals: ['year', 'quarter', 'month', 'week', 'dayofyear', 'day', 'weekday', 'hour', 'minute', 'second'] or a value of None, but the following are not time intervals: {invalid_names}"
+                )
 
         samples = values.get("train_samples")
         h_win, f_win = values.get("history_window"), values.get("forecast_window")
@@ -268,7 +304,7 @@ class Forecasting(BaseModel):
         df = self.series_to_supervised(
             df[[self.output]].copy(), self.history_window, self.forecast_window + 1
         )
-        x = df.iloc[:, :(self.history_window + 1)]
+        x = df.iloc[:, : (self.history_window + 1)]
         y = df.drop(columns=x.columns)
         return x, y
 
@@ -316,8 +352,10 @@ class Forecasting(BaseModel):
             self.forecast_frequency,
         ):
             # train a model and make a forecast
-            df_train = self.stream_data(self._data, step - self.train_samples, step)
-            predicted = self.predict_ahead(df_train)
+            df = self.stream_data(
+                self._data, step - self.train_samples, step
+            ).reset_index(drop=True)
+            predicted = self.predict_ahead(df)
             actual = (
                 self.stream_data(
                     self._data[[self.output]], step + 1, step + 1 + self.forecast_window

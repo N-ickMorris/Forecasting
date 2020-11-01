@@ -26,16 +26,20 @@ class Regression(Forecasting):
     Parameters
     ----------
     csv : str
-        CSV file of a data frame -> "example.csv"
+        name of (or path to) CSV file of a data frame
 
     output : str
-        name of column to predict in a model -> "Y"
+        name of column to predict in a model
 
-    inputs : list, default=None
-        names of columns to use as features in a model -> ["X1", "X2"]
+    inputs : list of str, default=None
+        names of columns to use as features in a model
 
     datetime : str, default=None
         name of column to use as an index for the predictions
+
+    resolution : list of str, default=None
+        name of time intervals to use as features in a model
+            options: year, quarter, month, week, dayofyear, day, weekday, hour, minute, second
 
     train_samples : int, default=100
         the number of observations to train the model with
@@ -91,12 +95,80 @@ class Regression(Forecasting):
             the forecast -> (1 row, W columns) where W is the forecast_window
         """
         # split up inputs (X) and outputs (Y)
-        X = df[self.inputs].copy()
+        X = df[self.inputs].copy() if not self.inputs is None else pd.DataFrame()
         Y = df[[self.output]].copy()
 
         # add autoregressive terms to X, add forecast horizon to Y
         X2, Y = self.reshape_output(Y)
         X = pd.concat([X, X2], axis="columns")
+
+        # add the timestamp features to X
+        if not self.resolution is None and not self.datetime is None:
+            try:
+                timestamps = pd.to_datetime(df[self.datetime])
+
+                # extend the timestamps to include the forecast horizon
+                delta = timestamps[-1:].values[0] - timestamps[-2:-1].values[0]
+                forecast_timestamps = pd.date_range(
+                    start=timestamps[-1:].values[0] + delta,
+                    end=timestamps[-1:].values[0] + delta * self.forecast_window,
+                    periods=self.forecast_window,
+                )
+                timestamps = pd.Series(
+                    np.concatenate((timestamps, forecast_timestamps))
+                )
+                T = pd.DataFrame()
+
+                # extract features from the timestamps
+                if "year" in self.resolution:
+                    year = pd.get_dummies(timestamps.dt.year.astype(str))
+                    year.columns = [f"year_{c}" for c in year.columns]
+                    T = pd.concat([T, year], axis="columns")
+                if "quarter" in self.resolution:
+                    quarter = pd.get_dummies(timestamps.dt.quarter.astype(str))
+                    quarter.columns = [f"quarter_{c}" for c in quarter.columns]
+                    T = pd.concat([T, quarter], axis="columns")
+                if "month" in self.resolution:
+                    month = pd.get_dummies(timestamps.dt.month.astype(str))
+                    month.columns = [f"month_{c}" for c in month.columns]
+                    T = pd.concat([T, month], axis="columns")
+                if "week" in self.resolution:
+                    week = pd.get_dummies(timestamps.dt.week.astype(str))
+                    week.columns = [f"week_{c}" for c in week.columns]
+                    T = pd.concat([T, week], axis="columns")
+                if "dayofyear" in self.resolution:
+                    dayofyear = pd.get_dummies(timestamps.dt.dayofyear.astype(str))
+                    dayofyear.columns = [f"dayofyear_{c}" for c in dayofyear.columns]
+                    T = pd.concat([T, dayofyear], axis="columns")
+                if "day" in self.resolution:
+                    day = pd.get_dummies(timestamps.dt.day.astype(str))
+                    day.columns = [f"day_{c}" for c in day.columns]
+                    T = pd.concat([T, day], axis="columns")
+                if "weekday" in self.resolution:
+                    weekday = pd.get_dummies(timestamps.dt.weekday.astype(str))
+                    weekday.columns = [f"weekday_{c}" for c in weekday.columns]
+                    T = pd.concat([T, weekday], axis="columns")
+                if "hour" in self.resolution:
+                    hour = pd.get_dummies(timestamps.dt.hour.astype(str))
+                    hour.columns = [f"hour_{c}" for c in hour.columns]
+                    T = pd.concat([T, hour], axis="columns")
+                if "minute" in self.resolution:
+                    minute = pd.get_dummies(timestamps.dt.minute.astype(str))
+                    minute.columns = [f"minute_{c}" for c in minute.columns]
+                    T = pd.concat([T, minute], axis="columns")
+                if "second" in self.resolution:
+                    second = pd.get_dummies(timestamps.dt.second.astype(str))
+                    second.columns = [f"second_{c}" for c in second.columns]
+                    T = pd.concat([T, second], axis="columns")
+
+                # add the forecasting horizon to the timestamp features
+                T = self.series_to_supervised(
+                    T, n_backward=0, n_forward=self.forecast_window + 1, dropnan=True
+                )
+                X = pd.concat([X, T], axis="columns")
+
+            except:
+                print("Cannot parse 'datetime' into a datetime object")
 
         # use the last row to predict the horizon
         X_new = X[-1:].copy()
