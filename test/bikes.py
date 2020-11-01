@@ -66,17 +66,18 @@ data = pd.get_dummies(data, columns=["season", "weather"])
 # )
 
 # save the data
-data.to_csv("test/bikes.csv", index=False)
+data.to_csv("test/bikes_v2.csv", index=False)
 
 # import the configuration for modeling
-with open("test/config.json") as f:
+with open("test/bikes.json") as f:
     config = json.load(f)
 
 # update the configuration for the new version of the data
-config["csv"] = "test/bikes.csv"
+config["csv"] = "test/bikes_v2.csv"
 config["inputs"] = data.drop(
     columns=["datetime", "count", "casual", "registered"]
 ).columns.tolist()
+# config["resolution"] = None
 
 # In[2]: Model the data
 
