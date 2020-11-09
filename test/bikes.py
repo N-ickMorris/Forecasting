@@ -19,9 +19,10 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../s
 
 from forecast import Forecasting
 from lasso import Regression
+from forest import Forest
+from nnet import MLP
 
 # In[1]: Prepare the data for modeling
-
 data = pd.read_csv("test/bikes.csv")
 
 # convert season and weather into binary variables
@@ -29,44 +30,8 @@ data["season"] = data["season"].astype(str)
 data["weather"] = data["weather"].astype(str)
 data = pd.get_dummies(data, columns=["season", "weather"])
 
-# # convert datetime to a date time object
-# data["datetime"] = pd.to_datetime(data["datetime"])
-# timestamps = pd.Series(data["datetime"])
-
-# # collect the hour as binary variables
-# hours = pd.get_dummies(timestamps.dt.hour.astype(str))
-# hours.columns = [f"Hour_{c}" for c in hours.columns]
-
-# # collect the weekday as binary variables
-# weekday = pd.get_dummies(timestamps.dt.weekday.astype(str))
-# weekday.columns = [f"Weekday_{c}" for c in weekday.columns]
-
-# # collect the week as binary variables
-# week = pd.get_dummies(timestamps.dt.isocalendar().week.astype(str))
-# week.columns = [f"Week_{c}" for c in week.columns]
-
-# # collect the month as binary variables
-# month = pd.get_dummies(timestamps.dt.month.astype(str))
-# month.columns = [f"Month_{c}" for c in month.columns]
-
-# # compute rolling statistics on the output
-# Avg = data[["count"]].rolling(6).mean()
-# Avg.columns = ["avg_count"]
-# Std = data[["count"]].rolling(6).std()
-# Std.columns = ["std_count"]
-# Min = data[["count"]].rolling(6).min()
-# Min.columns = ["min_count"]
-# Max = data[["count"]].rolling(6).max()
-# Max.columns = ["max_count"]
-
-# # add the features to the data
-# data = pd.concat(
-#     [data, hours, weekday, week, month, Avg, Std, Min, Max],
-#     axis="columns",
-# )
-
 # save the data
-data.to_csv("test/bikes_v2.csv", index=False)
+data[:1440].to_csv("test/bikes_v2.csv", index=False)
 
 # import the configuration for modeling
 with open("test/bikes.json") as f:
@@ -77,16 +42,47 @@ config["csv"] = "test/bikes_v2.csv"
 config["inputs"] = data.drop(
     columns=["datetime", "count", "casual", "registered"]
 ).columns.tolist()
+
+# test features
+# config["inputs"] = None
 # config["resolution"] = None
+config["input_history"] = False
 
 # In[2]: Model the data
 
-# produce a rolling forecast
-model = Regression(**config)
-model.roll(verbose=True)
-print(f"Average Error: {np.round(model._error.mean()[0] * 100, 2)}%")
+# produce a random forest rolling forecast
+print("---- Random Forest ----")
+model2 = Forest(**config)
+model2.roll(verbose=True)
+print(f"Forest Average Error: {np.round(model2._error.mean()[0] * 100, 2)}%")
+
+# produce a lasso regression rolling forecast
+print("---- Lasso Regression ----")
+model1 = Regression(**config)
+model1.roll(verbose=True)
+print(f"Lasso Average Error: {np.round(model1._error.mean()[0] * 100, 2)}%")
+
+# produce a neural network rolling forecast
+print("---- Neural Network ----")
+model3 = MLP(**config)
+model3.roll(verbose=True)
+print(f"NNet Average Error: {np.round(model3._error.mean()[0] * 100, 2)}%")
+
+# produce a baseline rolling forecast (exponential smoothing)
+print("---- Exponential Smoothing ----")
+baseline_model = Forecasting(**config)
+baseline_model.roll(verbose=True)
+print(f"Baseline Average Error: {np.round(baseline_model._error.mean()[0] * 100, 2)}%")
+
+# print(f"Baseline Average Error: {np.round(baseline_model._error.mean()[0] * 100, 2)}%")
+# print(f"Lasso Average Error: {np.round(model1._error.mean()[0] * 100, 2)}%")
+# print(f"Forest Average Error: {np.round(model2._error.mean()[0] * 100, 2)}%")
+# print(f"NNet Average Error: {np.round(model3._error.mean()[0] * 100, 2)}%")
 
 # In[3]: Analyze the model
+
+# pick a model
+model = model2
 
 # pick a step ahead to evaluate
 step_ahead = 1
@@ -103,7 +99,7 @@ print(
 )
 
 # plot the prediction series
-fig = px.scatter(df, x="index", y="Predict")
+fig = px.line(df, x="index", y="Predict")
 fig.add_trace(
     go.Scatter(
         x=df["index"], y=df["Actual"], mode="lines", showlegend=False, name="Actual"

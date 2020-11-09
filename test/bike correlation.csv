@@ -1,0 +1,26 @@
+variable 1,variable 2,correlation
+temp,temp,1.0
+atemp,temp,0.9849481104817348
+count,temp,0.39445364496725355
+humidity,temp,-0.06494877090120911
+windspeed,temp,-0.01785200986134651
+temp,atemp,0.9849481104817348
+atemp,atemp,1.0
+count,atemp,0.38978443662698026
+humidity,atemp,-0.043535709082554525
+windspeed,atemp,-0.05747300232820051
+temp,count,0.39445364496725355
+atemp,count,0.38978443662698026
+count,count,1.0
+humidity,count,-0.31737147887659395
+windspeed,count,0.10136947021033568
+temp,humidity,-0.06494877090120911
+atemp,humidity,-0.043535709082554525
+count,humidity,-0.31737147887659395
+humidity,humidity,1.0
+windspeed,humidity,-0.3186069915712938
+temp,windspeed,-0.01785200986134651
+atemp,windspeed,-0.05747300232820051
+count,windspeed,0.10136947021033568
+humidity,windspeed,-0.3186069915712938
+windspeed,windspeed,1.0

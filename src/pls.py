@@ -1,28 +1,26 @@
 # -*- coding: utf-8 -*-
 """
-Stream data through a lasso regression model to produce a rolling forecast
+Stream data through a partial least squares regression model to produce a rolling forecast
 
 @author: Nick
 """
 
-import warnings
 import numpy as np
 import pandas as pd
 from sklearn.pipeline import Pipeline
 from sklearn.feature_selection import VarianceThreshold
 from sklearn.preprocessing import MinMaxScaler, PolynomialFeatures, QuantileTransformer
-from sklearn.linear_model import Lasso, LassoCV
-from sklearn.multioutput import MultiOutputRegressor
+from sklearn.cross_decomposition import PLSRegression
+from sklearn.model_selection import RandomizedSearchCV
 from sklearn.model_selection import TimeSeriesSplit
 from forecast import Forecasting
 
 N_JOBS = 1  # The number of jobs to run in parallel (-1 means use all cores)
-MULTI = False  # should a model be built for each step of the forecasting horizon? (otherwise, one model for the entire horizon)
 
 
-class Regression(Forecasting):
+class PLS(Forecasting):
     """
-    Builds a Lasso Regression forecasting model
+    Builds a Partial Least Squares Regression forecasting model
 
     Parameters
     ----------
@@ -87,7 +85,7 @@ class Regression(Forecasting):
 
     def predict_ahead(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Make a single forecast with a Lasso Regression model
+        Make a single forecast with a Partial Least Squares Regression model
 
         Parameters
         ----------
@@ -100,25 +98,16 @@ class Regression(Forecasting):
             the forecast -> (1 row, W columns) where W is the forecast_window
         """
         # preprocess the data for supervised machine learning
-        X, Y, X_new = self.preprocessing(df, binary=True)
+        X, Y, X_new = self.preprocessing(df, binary=False)
 
         if self._counter >= self.train_frequency or self._model is None:
             object.__setattr__(self, "_counter", 0)
 
-            # set up the machine learning model
-            if self.tune_model:
-                # set up cross validation for time series
-                tscv = TimeSeriesSplit(n_splits=3)
-                folds = tscv.get_n_splits(X)
-                model = LassoCV(cv=folds, eps=1e-9, n_alphas=16, n_jobs=N_JOBS)
-            else:
-                model = Lasso(alpha=0.1, warm_start=True)
-            if MULTI:
-                model = MultiOutputRegressor(
-                    model, n_jobs=1 if self.tune_model else N_JOBS
-                )
-
             # set up a machine learning pipeline
+            model = PLSRegression(
+                n_components=min(X.shape[1] - 1, int(X.shape[0] / 2)),
+                scale=False,
+            )
             pipeline = Pipeline(
                 [
                     ("var", VarianceThreshold()),
@@ -130,8 +119,34 @@ class Regression(Forecasting):
                 ]
             )
 
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")  # ignore common warning
+            if self.tune_model:
+                # set up cross validation for time series
+                tscv = TimeSeriesSplit(n_splits=3)
+                folds = tscv.get_n_splits(X)
+
+                # set up the tuner
+                max_components = min(X.shape[1] - 1, int(X.shape[0] * 0.75))
+                n_models = 16  # number of models to search for
+                parameters = {
+                    "model__n_components": np.arange(
+                        1, max_components, step=int(max_components / n_models)
+                    ).tolist(),
+                }
+                grid = RandomizedSearchCV(
+                    pipeline,
+                    parameters,
+                    n_iter=n_models,
+                    cv=folds,
+                    random_state=0,
+                    n_jobs=N_JOBS,
+                )
+
+                object.__setattr__(
+                    self,
+                    "_model",
+                    grid.fit(X, Y).best_estimator_,  # search for the best model
+                )
+            else:
                 object.__setattr__(
                     self, "_model", pipeline.fit(X, Y)  # train the model
                 )

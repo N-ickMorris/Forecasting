@@ -5,15 +5,17 @@ Engineering features for bike share demand
 @author: Nick
 """
 
+import re
 import numpy as np
 import pandas as pd
 import datetime
 import calendar
+import scipy.cluster.hierarchy as sch
 
 
 def week_of_month(tgtdate):
     """
-    Get the week of the current month for a given timestamp 'tgtdate'
+    Get the week of the current month for a given timestamp "tgtdate"
     Weeks of month = 1, 2, 3, 4 = first week, second week, third week, forth week
 
     Reference: https://stackoverflow.com/questions/25249033/week-of-a-month-pandas
@@ -53,6 +55,19 @@ def series_to_supervised(data, n_backward=1, n_forward=1, dropnan=False):
     if dropnan:
         agg.dropna(inplace=True)
     return agg
+
+
+def corr_cluster(df, method="ward"):
+    # reorder columns based on hierarchical clustering
+    X = df.corr().values
+    d = sch.distance.pdist(X)
+    L = sch.linkage(d, method=method)
+    ind = sch.fcluster(L, 0.5 * d.max(), "distance")
+    columns = [df.columns.tolist()[i] for i in list((np.argsort(ind)))]
+    df = df.reindex(columns, axis=1)
+
+    # compute the correlation matrix
+    return df.corr()
 
 
 # read in the data
@@ -117,7 +132,15 @@ lags = series_to_supervised(
 autocorr = lags.corrwith(data["count"]).reset_index()
 autocorr.columns = ["Lag", "Correlation"]
 
+# compute correlation matrix
+corr = corr_cluster(
+    data[["temp", "atemp", "humidity", "windspeed", "count"]].astype(float)
+).reset_index()
+corr = pd.melt(corr, id_vars="index")
+corr.columns = ["variable 1", "variable 2", "correlation"]
+
 # export the data
 data = pd.concat([data, lags], axis="columns").dropna()
 data.to_csv("test/bike features.csv", index=False)
 autocorr.to_csv("test/bike autocorrelation.csv", index=False)
+corr.to_csv("test/bike correlation.csv", index=False)

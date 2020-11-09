@@ -18,7 +18,7 @@ class Forecasting(BaseModel):
     """
     A base class that can be inherited by a machine learning class to
     produce a model's rolling forecast -> redefine 'predict_ahead' method
-    By default this class builds an Exponential Smoothing model
+    By default this class builds an Exponential Smoothing forecasting model
 
     Parameters
     ----------
@@ -32,7 +32,7 @@ class Forecasting(BaseModel):
         names of columns to use as features in a model
 
     datetime : str, default=None
-        name of column to use as an index for the predictions
+        name of column to use as an index for the predictions and engineering time features
 
     resolution : list of str, default=None
         name of time intervals to use as features in a model
@@ -43,6 +43,10 @@ class Forecasting(BaseModel):
 
     history_window : int, default=10
         the number of past time periods used as features in the model
+
+    input_history : bool, default=False
+        should backward lags be computed for input variables to use as features in the model?
+        by default, backward lags are only computed for the output variable
 
     forecast_window : int, default=10
         the number of time periods in the future to predict
@@ -85,6 +89,7 @@ class Forecasting(BaseModel):
     resolution: Union[List[str], None] = None
     train_samples: int = 100
     history_window: int = 10
+    input_history: bool = False
     forecast_window: int = 10
     forecast_frequency: int = 1
     train_frequency: int = 5
@@ -262,7 +267,7 @@ class Forecasting(BaseModel):
             the requested data reshaped
         """
         n_vars = 1 if type(df) is list else df.shape[1]
-        df = pd.DataFrame(df)
+        df = pd.DataFrame(df.copy())
         cols, names = list(), list()
         # input sequence (t-n, ... t-1)
         for i in range(n_backward, 0, -1):
@@ -302,11 +307,250 @@ class Forecasting(BaseModel):
             the forward lagged features (outputs)
         """
         df = self.series_to_supervised(
-            df[[self.output]].copy(), self.history_window, self.forecast_window + 1
+            df[[self.output]], self.history_window, self.forecast_window + 1
         )
         x = df.iloc[:, : (self.history_window + 1)]
         y = df.drop(columns=x.columns)
         return x, y
+
+    def time_features(self, df: pd.DataFrame, binary: bool = True) -> pd.DataFrame:
+        """
+        Extract features from a datetime column
+
+        Parameters
+        ----------
+        df : pandas DataFrame
+            the available data with a datetime column
+
+        binary : bool, default=True
+            should the time features be converted into binary variables?
+
+        Returns
+        -------
+        T : pandas DataFrame
+            the time features
+        """
+        if self.resolution is None:
+            raise ValueError(
+                "'resolution' should be a list of any of the following time intervals: ['year', 'quarter', 'month', 'week', 'dayofyear', 'day', 'weekday', 'hour', 'minute', 'second'], got None instead"
+            )
+        if self.datetime is None:
+            raise ValueError(
+                "'datetime' should be a column name in 'df', got None instead"
+            )
+        timestamps = pd.to_datetime(df[self.datetime].copy())
+
+        # extend the timestamps to include the forecast horizon
+        delta = timestamps[-1:].values[0] - timestamps[-2:-1].values[0]
+        forecast_timestamps = pd.date_range(
+            start=timestamps[-1:].values[0] + delta,
+            end=timestamps[-1:].values[0] + delta * self.forecast_window,
+            periods=self.forecast_window,
+        )
+        timestamps = pd.Series(np.concatenate((timestamps, forecast_timestamps)))
+        T = pd.DataFrame()
+
+        # extract features from the timestamps
+        if "year" in self.resolution:
+            year = (
+                pd.get_dummies(timestamps.dt.year.astype(str))
+                if binary
+                else pd.DataFrame(timestamps.dt.year)
+            )
+            year.columns = [f"year_{c}" for c in year.columns] if binary else ["year"]
+            T = pd.concat([T, year], axis="columns")
+        if "quarter" in self.resolution:
+            quarter = (
+                pd.get_dummies(timestamps.dt.quarter.astype(str))
+                if binary
+                else pd.DataFrame(timestamps.dt.quarter)
+            )
+            quarter.columns = (
+                [f"quarter_{c}" for c in quarter.columns] if binary else ["quarter"]
+            )
+            T = pd.concat([T, quarter], axis="columns")
+        if "month" in self.resolution:
+            month = (
+                pd.get_dummies(timestamps.dt.month.astype(str))
+                if binary
+                else pd.DataFrame(timestamps.dt.month)
+            )
+            month.columns = (
+                [f"month_{c}" for c in month.columns] if binary else ["month"]
+            )
+            T = pd.concat([T, month], axis="columns")
+        if "week" in self.resolution:
+            week = (
+                pd.get_dummies(timestamps.dt.isocalendar().week.astype(str))
+                if binary
+                else pd.DataFrame(timestamps.dt.isocalendar().week)
+            )
+            week.columns = [f"week_{c}" for c in week.columns] if binary else ["week"]
+            T = pd.concat([T, week], axis="columns")
+        if "dayofyear" in self.resolution:
+            dayofyear = (
+                pd.get_dummies(timestamps.dt.dayofyear.astype(str))
+                if binary
+                else pd.DataFrame(timestamps.dt.dayofyear)
+            )
+            dayofyear.columns = (
+                [f"dayofyear_{c}" for c in dayofyear.columns]
+                if binary
+                else ["dayofyear"]
+            )
+            T = pd.concat([T, dayofyear], axis="columns")
+        if "day" in self.resolution:
+            day = (
+                pd.get_dummies(timestamps.dt.day.astype(str))
+                if binary
+                else pd.DataFrame(timestamps.dt.day)
+            )
+            day.columns = [f"day_{c}" for c in day.columns] if binary else ["day"]
+            T = pd.concat([T, day], axis="columns")
+        if "weekday" in self.resolution:
+            weekday = (
+                pd.get_dummies(timestamps.dt.weekday.astype(str))
+                if binary
+                else pd.DataFrame(timestamps.dt.weekday)
+            )
+            weekday.columns = (
+                [f"weekday_{c}" for c in weekday.columns] if binary else ["weekday"]
+            )
+            T = pd.concat([T, weekday], axis="columns")
+        if "hour" in self.resolution:
+            hour = (
+                pd.get_dummies(timestamps.dt.hour.astype(str))
+                if binary
+                else pd.DataFrame(timestamps.dt.hour)
+            )
+            hour.columns = [f"hour_{c}" for c in hour.columns] if binary else ["hour"]
+            T = pd.concat([T, hour], axis="columns")
+        if "minute" in self.resolution:
+            minute = (
+                pd.get_dummies(timestamps.dt.minute.astype(str))
+                if binary
+                else pd.DataFrame(timestamps.dt.minute)
+            )
+            minute.columns = (
+                [f"minute_{c}" for c in minute.columns] if binary else ["minute"]
+            )
+            T = pd.concat([T, minute], axis="columns")
+        if "second" in self.resolution:
+            second = (
+                pd.get_dummies(timestamps.dt.second.astype(str))
+                if binary
+                else pd.DataFrame(timestamps.dt.second)
+            )
+            second.columns = (
+                [f"second_{c}" for c in second.columns] if binary else ["second"]
+            )
+            T = pd.concat([T, second], axis="columns")
+
+        # add the forecasting horizon to the timestamp features
+        n_backward = self.history_window if self.input_history else 0
+        T = self.series_to_supervised(
+            T, n_backward=n_backward, n_forward=self.forecast_window + 1, dropnan=False
+        )
+        T = T.iloc[
+            : -self.forecast_window
+        ]  # remove the last set of rows with missing values
+
+        return T
+
+    def rolling_stats(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Compute rolling statistics on a data frame:
+            Mean, Min, Max, Std Dev
+
+        Parameters
+        ----------
+        df : pandas DataFrame
+            the available data
+
+        Returns
+        -------
+        S : pandas DataFrame
+            the rolling statistics
+        """
+        df = df.copy()
+        # rolling stats are shifted backward by 1 to enforce that only previous values are used in computation
+        Avg = df.rolling(self.history_window).mean().shift(1)
+        Avg.columns = [f"{c}_avg" for c in Avg.columns]
+        Min = df.rolling(self.history_window).min().shift(1)
+        Min.columns = [f"{c}_min" for c in Min.columns]
+        Max = df.rolling(self.history_window).max().shift(1)
+        Max.columns = [f"{c}_max" for c in Max.columns]
+        Std = df.rolling(self.history_window).std().shift(1)
+        Std.columns = [f"{c}_stdDev" for c in Std.columns]
+        S = pd.concat([Avg, Min, Max, Std], axis="columns")
+        return S
+
+    def preprocessing(self, df: pd.DataFrame, binary: bool = True) -> tuple:
+        """
+        Preprocess the training data with feature engineering to enable
+        forecasting with supervised machine learning models
+
+        Parameters
+        ----------
+        df : pandas DataFrame
+            the training (streamed) data to model
+
+        binary : bool, default=True
+            should the time features be converted into binary variables?
+
+        Returns
+        -------
+        X : pandas DataFrame
+            the input features and time series features to train the mode
+
+        Y : pandas DataFrame
+            the output widened by shifting itself to engineer the forecasting window to train the model
+
+        X_new : pandas DataFrame
+            the input features and time series features to produce the forecast
+        """
+        # split up inputs (X) and outputs (Y)
+        X = df[self.inputs].copy() if not self.inputs is None else pd.DataFrame()
+        Y = df[[self.output]].copy()
+
+        if self.input_history and not self.inputs is None:
+            # add autoregressive terms (on X) to X
+            Ax = self.series_to_supervised(
+                X, n_backward=self.history_window, n_forward=0
+            )
+
+            # add rolling statistics (on X) to X
+            Sx = self.rolling_stats(X)
+            X = pd.concat([X, Ax, Sx], axis="columns")
+
+        # add rolling statistics (on Y) to X
+        Sy = self.rolling_stats(Y)
+        X = pd.concat([X, Sy], axis="columns")
+
+        # add autoregressive terms (on Y) to X
+        # add forecast horizon to Y
+        Ay, Y = self.reshape_output(Y)
+        X = pd.concat([X, Ay], axis="columns")
+
+        # add timestamp features to X
+        if not self.resolution is None and not self.datetime is None:
+            try:
+                T = self.time_features(df[[self.datetime]], binary=binary)
+                X = pd.concat([X, T], axis="columns")
+            except:
+                print(
+                    "Cannot parse 'datetime' into a datetime object, no time features were added to the model"
+                )
+
+        # use the last row to predict the horizon
+        X_new = X[-1:].copy()
+
+        # remove missing values
+        df = pd.concat([X, Y], axis="columns").dropna()
+        X = df[X.columns]
+        Y = df[Y.columns]
+
+        return X, Y, X_new
 
     def predict_ahead(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -337,14 +581,14 @@ class Forecasting(BaseModel):
         predictions = pd.DataFrame(predictions).reset_index(drop=True).T
         return predictions
 
-    def roll(self, verbose: int = 1) -> None:
+    def roll(self, verbose: bool = True) -> None:
         """
         Make rolling forecasts with a model
 
         Parameters
         ----------
-        verbose : int
-            should the forecasting error be printed out? (0 - no, 1 - yes)
+        verbose : bool, default=True
+            should the forecasting error be printed out?
         """
         for step in range(
             self.train_samples,
@@ -395,7 +639,7 @@ class Forecasting(BaseModel):
             )
 
             # report the percent error
-            if verbose != 0:
+            if verbose:
                 print(
                     f"time={error.index[0]}, error={np.round(error.values[0] * 100, 2)[0]}%"
                 )

@@ -1,0 +1,14 @@
+{
+    "csv": "test/weather.csv",
+    "output": "avg_temp",
+    "inputs": null,
+    "datetime": "date",
+    "resolution": ["week", "month"],
+    "train_samples": 400,
+    "history_window": 6,
+    "input_history": false,
+    "forecast_window": 7,
+    "forecast_frequency": 1,
+    "train_frequency": 1,
+    "tune_model": true
+}

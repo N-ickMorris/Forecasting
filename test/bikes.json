@@ -4,9 +4,10 @@
     "inputs": ["season", "holiday", "workingday", "weather", "temp", "atemp", "humidity", "windspeed"],
     "datetime": "datetime",
     "resolution": ["hour", "weekday"],
-    "train_samples": 1440,
+    "train_samples": 720,
     "history_window": 6,
-    "forecast_window": 24,
+    "input_history": false,
+    "forecast_window": 1,
     "forecast_frequency": 1,
     "train_frequency": 1,
     "tune_model": false
