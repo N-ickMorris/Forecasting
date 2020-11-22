@@ -128,6 +128,8 @@ class Bayes(Forecasting):
                     "model__estimator__tol": [1e-3],
                     "model__estimator__alpha_1": [1e-2, 1e-6, 1e-10],
                     "model__estimator__lambda_1": [1e-2, 1e-6, 1e-10],
+                    "model__estimator__alpha_2": [1e-2, 1e-6, 1e-10],
+                    "model__estimator__lambda_2": [1e-2, 1e-6, 1e-10],
                 }
                 grid = RandomizedSearchCV(
                     pipeline,

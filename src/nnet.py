@@ -377,7 +377,7 @@ class DenseNet(Forecasting):
 
         # compile the model
         model.compile(
-            loss=["mean_squared_error" for _ in h_layers],
+            loss=["mean_squared_error" for _ in range(n_outputs)],
             optimizer=optimizers.Adam(lr=learning_rate),
         )
         return model

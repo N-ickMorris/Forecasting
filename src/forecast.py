@@ -13,6 +13,15 @@ import numpy as np
 import pandas as pd
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
 
+# ---- GAUSSIAN TRANSFORM ----
+# from sklearn.preprocessing import PowerTransformer
+# pwr = PowerTransformer()
+# _names = df.columns + "_yeoJohn"
+# df_yj = pwr.fit_transform(df)
+# df_yj.columns = _names
+# ---- STATIONARY TRANSFORM ----
+# y_stationary =  (y - y.rolling(window=12).mean())/y.rolling(window=12).std()
+# y_stationary.columns = y_stationary.columns + "_stationary"
 
 class Forecasting(BaseModel):
     """
@@ -460,7 +469,7 @@ class Forecasting(BaseModel):
     def rolling_stats(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Compute rolling statistics on a data frame:
-            Mean, Min, Max, Std Dev
+            Mean, Min, Max, Standard Deviation, Percent Deviation from the Mean
 
         Parameters
         ----------
@@ -482,7 +491,9 @@ class Forecasting(BaseModel):
         Max.columns = [f"{c}_max" for c in Max.columns]
         Std = df.rolling(self.history_window).std().shift(1)
         Std.columns = [f"{c}_stdDev" for c in Std.columns]
-        S = pd.concat([Avg, Min, Max, Std], axis="columns")
+        Per = (df / df.rolling(self.history_window).mean() - 1).shift(1)
+        Per.columns = [f"{c}_perDev" for c in Per.columns]
+        S = pd.concat([Avg, Min, Max, Std, Per], axis="columns")
         return S
 
     def preprocessing(self, df: pd.DataFrame, binary: bool = True) -> tuple:
@@ -506,7 +517,7 @@ class Forecasting(BaseModel):
         Y : pandas DataFrame
             the output widened by shifting itself to engineer the forecasting window to train the model
 
-        X_new : pandas DataFrame
+        X_ahead : pandas DataFrame
             the input features and time series features to produce the forecast
         """
         # split up inputs (X) and outputs (Y)
@@ -543,14 +554,14 @@ class Forecasting(BaseModel):
                 )
 
         # use the last row to predict the horizon
-        X_new = X[-1:].copy()
+        X_ahead = X[-1:].copy()
 
         # remove missing values
         df = pd.concat([X, Y], axis="columns").dropna()
         X = df[X.columns]
         Y = df[Y.columns]
 
-        return X, Y, X_new
+        return X, Y, X_ahead
 
     def predict_ahead(self, df: pd.DataFrame) -> pd.DataFrame:
         """
