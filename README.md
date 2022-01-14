@@ -25,7 +25,7 @@ git config --global user.email "Email"
 ```ssh
 mkdir repos
 cd repos
-git clone https://github.com/nmorris-fcx/Forecasting.git
+git clone https://github.com/N-ickMorris/Forecasting.git
 cd Forecasting
 ```
 
